@@ -1,0 +1,186 @@
+import tkinter as tk
+import customtkinter as ctk
+import speedtest
+import threading
+import csv
+from datetime import datetime
+import os
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__))
+ARQUIVO_HISTORICO = os.path.join(DIRETORIO_ATUAL, "historico.csv")
+
+class SpeedTestApp(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        self.title("Internet Speed Test")
+        self.geometry("700x450")
+        self.resizable(True, True)
+        self.minsize(width=600, height=450)
+
+        # --- Status ---
+        self.label_status = ctk.CTkLabel(self, text="Status: Pronto", font=("Roboto", 14))
+        self.label_status.pack(pady=(10, 0))
+
+        # Criação das abas
+        self.tabview = ctk.CTkTabview(self, width=700, height=500)
+        self.tabview.pack(padx=20, pady=10, fill="both", expand=True)
+        
+        self.tab_teste = self.tabview.add("Teste")
+        self.tab_hist = self.tabview.add("Histórico")
+
+        # --- Título ---
+        self.label_titulo = ctk.CTkLabel(self.tab_teste, text="SPEED TEST", font=("Roboto", 28, "bold"))
+        self.label_titulo.pack(pady=20)
+
+        # --- Container dos Cards ---
+        self.frame_cards = ctk.CTkFrame(self.tab_teste, fg_color="transparent")
+        self.frame_cards.pack(fill="x", padx=20)
+
+        # Card de Download
+        self.card_down = self.criar_card("DOWNLOAD", "0.0", "#1f6aa5")
+        self.card_down.grid(row=0, column=0, padx=10)
+
+        # Card de Upload
+        self.card_up = self.criar_card("UPLOAD", "0.0", "#2d8a4e")
+        self.card_up.grid(row=0, column=1, padx=10)
+
+        # Card de Latência (Ping)
+        self.card_ping = self.criar_card("PING", "0", "#8e44ad")
+        self.card_ping.grid(row=0, column=2, padx=10)
+
+        # Configurar colunas iguais
+        self.frame_cards.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Botão start
+        self.btn_start = ctk.CTkButton(self.tab_teste, text="START TEST", command=self.iniciar_thread_teste, width=200, height=50, font=("Roboto", 16, "bold"))
+        self.btn_start.pack(pady=20)
+
+        # Aba histórico
+        self.textbox_hist = ctk.CTkTextbox(self.tab_hist, width=650, height=400, font=("Courier New", 13))
+        self.textbox_hist.configure(state="disabled")
+        self.textbox_hist.pack(padx=10, pady=10, fill="both", expand=True)
+        
+        self.btn_atualizar = ctk.CTkButton(self.tab_hist, text="Atualizar Histórico", command=self.carregar_historico_na_aba)
+        self.btn_atualizar.pack(pady=10)
+
+    def criar_card(self, titulo, valor_inicial, cor_destaque):
+        frame = ctk.CTkFrame(self.frame_cards, width=180, height=180, corner_radius=20)
+        frame.pack_propagate(False) # Mantém o tamanho fixo
+        
+        lbl_titulo = ctk.CTkLabel(frame, text=titulo, font=("Roboto", 12, "bold"), text_color="gray")
+        lbl_titulo.pack(pady=(20, 10))
+
+        lbl_valor = ctk.CTkLabel(frame, text=valor_inicial, font=("Roboto", 32, "bold"), text_color=cor_destaque)
+        lbl_valor.pack(expand=True)
+
+        lbl_unidade = ctk.CTkLabel(frame, text="Mbps" if titulo != "PING" else "ms", font=("Roboto", 10))
+        lbl_unidade.pack(pady=(0, 20))
+
+        if titulo == "DOWNLOAD": self.val_down = lbl_valor
+        elif titulo == "UPLOAD": self.val_up = lbl_valor
+        else: self.val_ping = lbl_valor
+        
+        return frame
+    
+    def salvar_historico(self, down, up, ping):
+        data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        existe = os.path.exists(ARQUIVO_HISTORICO)
+        
+        with open(ARQUIVO_HISTORICO, mode="a", newline="", encoding="utf-8") as f:
+            escritor = csv.writer(f)
+            if not existe:
+                escritor.writerow(["Data/Hora", "Download (Mbps)", "Upload (Mbps)", "Ping (ms)"])
+            escritor.writerow([data_atual, f"{down:.2f}", f"{up:.2f}", f"{ping:.0f}"])
+    
+    def abrir_historico(self):
+        if os.path.exists(ARQUIVO_HISTORICO):
+            os.startfile(ARQUIVO_HISTORICO)
+        else:
+            self.label_status.configure(text="Status: Histórico ainda não existe!")
+
+    def carregar_historico_na_aba(self):
+        self.textbox_hist.configure(state="normal")
+        self.textbox_hist.delete("1.0", tk.END)
+        
+        if os.path.exists(ARQUIVO_HISTORICO):
+            with open(ARQUIVO_HISTORICO, mode="r", encoding="utf-8") as f:
+                leitor = csv.reader(f)
+                
+                self.textbox_hist.insert(tk.END, f"{'DATA / HORA':<22} | {'DOWN':<10} | {'UP':<10} | {'PING':<6}\n")
+                self.textbox_hist.insert(tk.END, "-" * 60 + "\n")
+                
+                next(leitor, None) 
+                
+                for linha in leitor:
+                    if len(linha) == 4:
+                        data, down, up, ping = linha
+                        texto_formatado = f"{data:<22} | {down:<10} | {up:<10} | {ping:<6}\n"
+                        self.textbox_hist.insert(tk.END, texto_formatado)
+        else:
+            self.textbox_hist.insert("1.0", "Nenhum histórico encontrado.")
+        
+        self.textbox_hist.configure(state="disabled")
+    
+    def animar_valor(self, label, valor_final, atual=0.0):
+        passo = valor_final / 30 
+        
+        if atual < valor_final:
+            novo_valor = atual + passo
+            if novo_valor > valor_final: novo_valor = valor_final
+            
+            texto = f"{novo_valor:.1f}" if valor_final > 10 else f"{novo_valor:.0f}"
+            label.configure(text=texto)
+            
+            self.after(20, lambda: self.animar_valor(label, valor_final, novo_valor))
+
+    def atualizar_status_ui(self, texto):
+        """Atualiza o texto de status de forma segura para a thread."""
+        self.label_status.configure(text=texto)
+
+    def iniciar_thread_teste(self):
+        self.btn_start.configure(state="disabled", text="TESTANDO...")
+        self.label_status.configure(text="Status: Conectando ao servidor...")
+        
+        thread = threading.Thread(target=self.executar_teste, daemon=True)
+        thread.start()
+
+    def executar_teste(self):
+        try:
+            self.after(0, lambda: self.val_down.configure(text="0.0"))
+            self.after(0, lambda: self.val_up.configure(text="0.0"))
+            self.after(0, lambda: self.val_ping.configure(text="0"))
+
+            st = speedtest.Speedtest(secure=True)
+            st.get_servers()
+            st.get_best_server()
+            
+            self.after(0, lambda: self.atualizar_status_ui("Status: Testando Download..."))
+            down_speed = st.download() / 1_000_000
+            self.after(0, lambda: self.animar_valor(self.val_down, down_speed))
+
+            self.after(0, lambda: self.atualizar_status_ui("Status: Testando Upload..."))
+            up_speed = st.upload() / 1_000_000
+            self.after(0, lambda: self.animar_valor(self.val_up, up_speed))
+
+            ping = st.results.ping
+            self.after(0, lambda: self.animar_valor(self.val_ping, ping))
+            
+            self.salvar_historico(down_speed, up_speed, ping)
+            self.after(0, self.carregar_historico_na_aba)
+
+            self.after(0, lambda: self.atualizar_status_ui("Status: Teste Finalizado!"))
+            
+        except Exception as e:
+            print(f"Erro detalhado: {e}")
+            self.after(0, lambda: self.atualizar_status_ui("Status: Erro de Conexão"))
+            
+        finally:
+            self.after(0, lambda: self.btn_start.configure(state="normal", text="START TEST"))
+
+if __name__ == "__main__":
+    app = SpeedTestApp()
+    app.mainloop()

@@ -38,7 +38,7 @@ O aplicativo realiza testes de **Download**, **Upload** e **Ping**, além de arm
 Clone o repositório:
 
 ```bash
-git clone https://github.com/seu-usuario/internet-speed-test.git
+git clone https://github.com/lucas-sturiao/velora.git
 ```
 
 Acesse a pasta do projeto:
@@ -121,6 +121,3 @@ Caso encontre algum problema ou tenha sugestões de melhorias:
 2. Crie uma nova Branch.
 3. Faça suas alterações.
 4. Envie um Pull Request.
----
-
-⭐ Se este projeto foi útil para você, considere deixar uma estrela no repositório.
